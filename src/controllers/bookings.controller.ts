@@ -1,7 +1,6 @@
-// src/controllers/bookings.controller.ts
 import { Request, Response, NextFunction } from "express";
 import db from "../config/db";
-import { bookings, insertBookingSchema, users, services } from "../models/schema";
+import { bookings, insertBookingSchema } from "../models/schema";
 import { eq } from "drizzle-orm";
 
 // ======================
@@ -11,19 +10,7 @@ export async function createBooking(req: Request, res: Response, next: NextFunct
     try {
         const data = insertBookingSchema.parse(req.body);
 
-        // Optionally: check if user and service exist
-        const [user] = await db.select().from(users).where(eq(users.id, data.user_id));
-        const [service] = await db.select().from(services).where(eq(services.id, data.service_id));
-
-        if (!user) return res.status(400).json({ success: false, message: "Invalid user ID" });
-        if (!service) return res.status(400).json({ success: false, message: "Invalid service ID" });
-
-        const [newBooking] = await db.insert(bookings)
-            .values({
-                ...data,
-                date: new Date(data.date),
-            })
-            .returning();
+        const [newBooking] = await db.insert(bookings).values(data).returning();
 
         res.status(201).json({
             success: true,
@@ -40,8 +27,8 @@ export async function createBooking(req: Request, res: Response, next: NextFunct
 // ======================
 export async function getAllBookings(_req: Request, res: Response, next: NextFunction) {
     try {
-        const all = await db.select().from(bookings);
-        res.json({ success: true, bookings: all });
+        const allBookings = await db.select().from(bookings).orderBy(bookings.createdAt);
+        res.json({ success: true, bookings: allBookings });
     } catch (err) {
         next(err);
     }
@@ -52,7 +39,7 @@ export async function getAllBookings(_req: Request, res: Response, next: NextFun
 // ======================
 export async function getBookingById(req: Request, res: Response, next: NextFunction) {
     try {
-        const id = parseInt(req.params.id);
+        const id = req.params.id;
         const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
 
         if (!booking) {
@@ -64,4 +51,3 @@ export async function getBookingById(req: Request, res: Response, next: NextFunc
         next(err);
     }
 }
-

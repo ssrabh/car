@@ -1,12 +1,13 @@
+
 // src/routes/bookings.routes.ts
 import { Router } from "express";
 import { createBooking, getAllBookings, getBookingById } from "../controllers/bookings.controller";
-import { requireAuth } from "../middlewares/auth.middleware";
 
-const r = Router();
+const router = Router();
 
-r.get("/", requireAuth, getAllBookings);
-r.get("/:id", requireAuth, getBookingById);
-r.post("/", requireAuth, createBooking);
+router.post("/", createBooking);
+router.get("/", getAllBookings);
+router.get("/:id", getBookingById);
 
-export default r;
+export default router;
+
