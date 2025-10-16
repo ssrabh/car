@@ -10,3 +10,5 @@ export const signJwt = (payload: object): string => {
 export const verifyJwt = (token: string): JwtPayload | string => {
     return jwt.verify(token, JWT_SECRET as string);
 };
+
+
