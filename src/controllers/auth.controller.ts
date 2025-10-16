@@ -1,47 +1,41 @@
 // src/controllers/auth.controller.ts
 import { Request, Response, NextFunction } from "express";
-import { z } from "zod";
+import { insertUserSchema } from "../models/schema";
 import { hashPassword, comparePassword } from "../utils/hash";
 import { signJwt } from "../utils/jwt";
 import db from "../config/db";
 import { users } from "../models/schema";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
-// Zod validation schemas
-const registerSchema = z.object({
-    name: z.string().min(2),
-    email: z.email(),
-    password: z.string().min(6),
-});
-
+// Login schema (still explicit, since not all fields are from DB)
 const loginSchema = z.object({
-    email: z.email(),
-    password: z.string().min(6),
+    email: z.string().email("Invalid email format"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-// Register controller
+// ======================
+// REGISTER
+// ======================
 export async function register(req: Request, res: Response, next: NextFunction) {
     try {
-        const data = registerSchema.parse(req.body);
+        // Validate input using shared schema
+        const data = insertUserSchema.parse(req.body);
 
         // Check if email already exists
-        const existingUser = await db.select().from(users).where(eq(users.email, data.email));
-        if (existingUser.length > 0) {
+        const existing = await db.select().from(users).where(eq(users.email, data.email));
+        if (existing.length > 0) {
             return res.status(400).json({ success: false, message: "Email already registered" });
         }
 
-        const hashed = await hashPassword(data.password);
+        // Hash password
+        const hashedPassword = await hashPassword(data.password);
 
-        const inserted = await db
+        // Insert into DB
+        const [newUser] = await db
             .insert(users)
-            .values({
-                name: data.name,
-                email: data.email,
-                password: hashed,
-            })
+            .values({ ...data, password: hashedPassword })
             .returning({ id: users.id, name: users.name, email: users.email });
-
-        const newUser = inserted[0];
 
         res.status(201).json({
             success: true,
@@ -53,7 +47,9 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     }
 }
 
-// Login controller
+// ======================
+// LOGIN
+// ======================
 export async function login(req: Request, res: Response, next: NextFunction) {
     try {
         const data = loginSchema.parse(req.body);
@@ -80,5 +76,3 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         next(err);
     }
 }
-
-

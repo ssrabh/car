@@ -15,6 +15,13 @@
       "when": 1760515333839,
       "tag": "0001_cuddly_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1760585689162,
+      "tag": "0002_pink_prima",
+      "breakpoints": true
     }
   ]
 }
