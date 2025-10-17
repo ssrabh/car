@@ -10,25 +10,42 @@ import { sendEmail, EMAIL_FROM } from "../services/emailService"; // Import the 
 // CREATE BOOKING
 // ======================
 export async function createBooking(req: Request, res: Response, next: NextFunction) {
+    let newBooking: typeof bookings.$inferSelect; // Define outside try block for scope
+
     try {
         // 1. Validate incoming data
         const data = insertBookingSchema.parse(req.body);
 
-        // 2. Insert into database
-        const [newBooking] = await db.insert(bookings).values(data).returning();
+        // 2. Insert into database (CRITICAL STEP)
+        const [insertedBooking] = await db.insert(bookings).values(data).returning();
+        newBooking = insertedBooking; // Assign the result
 
-        // 3. Prepare and Send Confirmation Email
-        // The data object contains all customer info (name, email, phone, etc.)
-        await sendBookingConfirmationEmail(newBooking);
+        // 3. Prepare and Send Confirmation Email (NON-CRITICAL STEP)
+        try {
+            await sendBookingConfirmationEmail(newBooking);
 
-        // 4. Respond to client
-        res.status(201).json({
-            success: true,
-            message: "Booking created successfully. Confirmation email sent.",
-            booking: newBooking,
-        });
+            // 4. Respond to client with success message
+            return res.status(201).json({
+                success: true,
+                message: "Booking created successfully. Confirmation email sent.",
+                booking: newBooking,
+            });
+
+        } catch (emailError) {
+            // Log the email error but DO NOT re-throw it!
+            console.error("❌ WARNING: Failed to send confirmation email for booking ID:", newBooking.id, emailError);
+
+            // 4. Respond to client, warning them about the email failure.
+            // Use 'return' to exit the main function cleanly.
+            return res.status(201).json({
+                success: true,
+                message: "Booking created successfully. WARNING: Failed to send confirmation email.",
+                booking: newBooking,
+            });
+        }
 
     } catch (err) {
+        // This catch block handles DB or Validation errors only.
         next(err);
     }
 }
@@ -167,3 +184,59 @@ export async function getBookingById(req: Request, res: Response, next: NextFunc
         next(err);
     }
 }
+
+
+/*
+
+// src/controllers/bookingController.ts (or wherever your createBooking is)
+
+import { Request, Response, NextFunction } from "express";
+import db from "../config/db";
+import { bookings, insertBookingSchema } from "../models/schema"; // Your schemas
+// ... other imports
+
+// ======================
+// CREATE BOOKING
+// ======================
+export async function createBooking(req: Request, res: Response, next: NextFunction) {
+    let newBooking: typeof bookings.$inferSelect; // Define outside try block for scope
+
+    try {
+        // 1. Validate incoming data
+        const data = insertBookingSchema.parse(req.body);
+
+        // 2. Insert into database (CRITICAL STEP)
+        const [insertedBooking] = await db.insert(bookings).values(data).returning();
+        newBooking = insertedBooking; // Assign the result
+
+        // 3. Prepare and Send Confirmation Email (NON-CRITICAL STEP)
+        try {
+            await sendBookingConfirmationEmail(newBooking);
+            
+            // 4. Respond to client with success message
+            return res.status(201).json({
+                success: true,
+                message: "Booking created successfully. Confirmation email sent.",
+                booking: newBooking,
+            });
+
+        } catch (emailError) {
+            // Log the email error but DO NOT re-throw it!
+            console.error("❌ WARNING: Failed to send confirmation email for booking ID:", newBooking.id, emailError);
+            
+            // 4. Respond to client, warning them about the email failure.
+            // Use 'return' to exit the main function cleanly.
+            return res.status(201).json({
+                success: true,
+                message: "Booking created successfully. WARNING: Failed to send confirmation email.",
+                booking: newBooking,
+            });
+        }
+
+    } catch (err) {
+        // This catch block handles DB or Validation errors only.
+        next(err);
+    }
+}
+// ... the rest of the file (sendBookingConfirmationEmail, getAllBookings, etc.)
+*/
