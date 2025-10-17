@@ -1,0 +1,119 @@
+// this is text file for whatapp msg configuration
+
+# .env file content
+
+# ... existing SMTP variables ...
+
+# WhatsApp (Twilio Example)
+TWILIO_ACCOUNT_SID=ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886 # The official number registered with Twilio
+WHATSAPP_TEMPLATE_NAME=booking_confirmation # Your approved template name
+
+
+npm install twilio
+
+
+// src/services/whatsappService.ts
+
+import 'dotenv/config'; 
+import twilio from 'twilio';
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+const templateName = process.env.WHATSAPP_TEMPLATE_NAME;
+
+const client = twilio(accountSid, authToken);
+
+// Check for missing credentials (similar to emailService)
+if (!accountSid || !authToken || !fromNumber || !templateName) {
+    console.warn("⚠️ WhatsApp service is not fully configured. Messages will not be sent.");
+}
+
+/**
+ * Sends a templated WhatsApp message to a user.
+ * NOTE: The user's phone number must include the country code (e.g., +91).
+ * @param to The recipient's phone number (must start with country code, e.g., '+919876543210')
+ * @param templateParameters The dynamic data to insert into the approved message template.
+ */
+export async function sendWhatsAppMessage(
+    to: string, 
+    templateParameters: string[]
+) {
+    if (!accountSid || !templateName) {
+        return console.warn("Skipping WhatsApp message due to missing configuration.");
+    }
+    
+    // Twilio template format uses the 'template' body, with components for dynamic data
+    const templateBody = {
+        name: templateName,
+        language: { code: 'en_US' },
+        components: [{
+            type: 'body',
+            parameters: templateParameters.map(value => ({
+                type: 'text',
+                text: value,
+            })),
+        }],
+    };
+
+    try {
+        const message = await client.messages.create({
+            contentSid: templateName, // Use contentSid with the template name
+            from: fromNumber,
+            to: `whatsapp:${to}`, // Twilio requires the 'whatsapp:' prefix
+            body: JSON.stringify(templateBody), // Send the structured template data
+        });
+
+        console.log("✅ WhatsApp message queued. SID:", message.sid);
+        return message;
+    } catch (error) {
+        // Handle API errors (e.g., invalid number, rate limit)
+        console.error("❌ Error sending WhatsApp message to %s:", to, error.message);
+        // Do not throw, as failure to send a notification shouldn't crash the booking creation
+    }
+}
+
+
+// src/controllers/bookingController.ts
+
+// Import the new service
+import { sendWhatsAppMessage } from "../services/whatsappService"; 
+
+// ... existing imports ...
+
+// ... createBooking function ...
+export async function createBooking(req: Request, res: Response, next: NextFunction) {
+    try {
+        const data = insertBookingSchema.parse(req.body);
+        const [newBooking] = await db.insert(bookings).values(data).returning();
+        
+        // 1. Send Email (Existing Logic)
+        await sendBookingConfirmationEmail(newBooking);
+
+        // 2. Send WhatsApp Message
+        // Parameters must exactly match the placeholders in your approved template
+        const templateData = [
+            newBooking.name,                     // Parameter 1: Customer Name
+            newBooking.id.substring(0, 8),       // Parameter 2: Booking ID
+            newBooking.preferredDate || 'N/A',   // Parameter 3: Date
+            newBooking.preferredTime || 'N/A',   // Parameter 4: Time
+        ];
+
+        await sendWhatsAppMessage(
+            newBooking.phone, // Assuming phone includes country code (e.g., +91...)
+            templateData
+        );
+        
+        // 3. Respond to client
+        res.status(201).json({
+            success: true,
+            message: "Booking created. Confirmation sent via Email and WhatsApp.",
+            booking: newBooking,
+        });
+
+    } catch (err) {
+        next(err);
+    }
+}
